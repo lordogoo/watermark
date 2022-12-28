@@ -1,0 +1,249 @@
+<html>
+<head>
+<style>
+table td{
+	vertical-align: top;
+}
+</style>
+<script src="FileSaver.min.js"></script>
+</head>
+<body>
+<center>
+<h3>Anti Ai Watermark Maker</h3>
+<img id="logo" src="noAI.bmp"></image>
+</center>
+What this application does is it embeds an Anti Ai watermark in the top right hand corner of any image. It does this by generating a random delta between 50 and 80 and adds it to the pixel color information in the shape of the anti ai watermark. Said watermark is designed to take up a square that is 20% of the height of the original image.
+<br>
+The purpose of this tool is to foul up the input data of ai's attempting to use art without the consent of the artist as input data.
+<br>
+To use this tool upload an image by either dragging and dropping it on the rectangle or selecting it via the file chooser. then click the process data button. This tool will then one by one add the watermark to the images and then output the new watermarked image with a "_watermark" added to the name of the file and it will output a text file with "_deltavalue" in its name that will have the delta value used by the random generator to determine the color shift. Please keep the delta value file just in case you loose the original and need to know what value things need to be shifted to restore the watermarked image to the original image.
+<hr>
+<table>
+<tr>
+<td>
+<div id="dropContainer" style="border:1px solid black;height:100px;">
+   Drop Here
+</div>
+<input id="fileInput" onchange="readFile(this)" accept=".png,.bmp,.jpg,.jpeg,.gif" type="file" multiple>
+</td>
+<td>
+<div id="fileListContainer"></div>
+</td>
+<td>
+<input id="processbutton" type="button" value="process files">
+<br>
+<progress id="progress"  value="19" max="90" style="display:none"></progress>
+<br>
+<br>
+<input type="button" onClick="clearall()" value="clear list">
+</td>
+<td>
+<div id="fileProcessedContainer"></div>
+</td>
+</tr>
+</table>
+<canvas id="canvasLogo" style="display:none"></canvas>
+<br>
+<canvas id="canvasEdited" style="display:none"></canvas>
+<script>
+document.getElementById("processbutton").onclick=async ()=>{
+           await processAsync();
+};
+const progressBar = document.getElementById("progress");
+
+const canvasEdited =  document.getElementById('canvasEdited');
+const ctxEdited = canvasEdited.getContext('2d');
+
+const dropContainer = document.getElementById('dropContainer');
+const fileListContainer = document.getElementById('fileListContainer');
+
+const logoimg = document.getElementById("logo");
+const canvasLogo = document.getElementById('canvasLogo');
+var imgLogo = null;
+var widthLogo = 0;
+var heightLogo = 0;
+var imageDataLogo = null;
+var dataLogo = null;
+var randomLogo = 0;
+const randomLogoMax = 80;
+const randomLogoMin = 50;
+const watermarkPercent = 0.2;
+
+var img;
+const filelist = [];
+
+function clearall(){
+	filelist.splice(0,filelist.length)
+	clearfilelist();
+}
+
+function clearfilelist(){
+	while(fileListContainer.lastChild){
+		fileListContainer.removeChild(fileListContainer.lastChild);
+	}
+}
+
+function updatefilelist(){
+	for(let i = 0; i < filelist.length; i++){
+		let div = document.createElement("div");
+		let span = document.createElement("span");
+		span.innerHTML = filelist[i].name;
+		div.appendChild(span);
+		let button = document.createElement("button");
+		button.onclick = function() {removefile(filelist[i].name)};
+		button.innerHTML = 'X';
+		div.appendChild(button);
+		fileListContainer.appendChild(div);
+	}
+}
+
+function removefile(filename){
+	for(let i = filelist.length-1; i >= 0; i--){
+		if(filelist[i].name == filename){
+			filelist.splice(i, 1);
+			fileListContainer.removeChild(fileListContainer.childNodes[i]);
+		}
+	}
+}
+
+/****************************
+process button helpers
+*****************************/
+const SaveFiles = (blob,text,filename,fileextension) => {
+  return new Promise(resolve => {
+    	saveAs(blob, filename+"_watermark."+fileextension);
+	var txtblob = new Blob([text], {
+    		type: "text/plain;charset=utf-8"
+  	});
+  	saveAs(txtblob, filename+"_deltavalue.txt");
+	resolve();
+  });
+}
+
+const SaveBlob = (text,filename,fileextension) => {
+  return new Promise(resolve => {
+    	canvasEdited.toBlob(async function(blob) {
+		await SaveFiles(blob,text,filename,fileextension);
+		resolve();
+	});
+  });
+}
+
+const drawLogo = (i,watermarkHeight,imageData,data,width) => {
+	return new Promise(resolve => {
+		imgLogo.onload = async function() {
+			widthLogo = logoimg.width;
+			heightLogo = logoimg.height;
+			canvasLogo.width = watermarkHeight;
+			canvasLogo.height = watermarkHeight;
+			const ctxLogo = canvasLogo.getContext('2d');
+			ctxLogo.drawImage(logoimg,0,0,widthLogo,heightLogo,
+				0,0,watermarkHeight,watermarkHeight);
+			imageDataLogo = ctxLogo.getImageData(0,0,watermarkHeight ,watermarkHeight);
+			dataLogo = imageDataLogo.data;
+
+			randomLogo = Math.floor(Math.random() * (randomLogoMax - randomLogoMin + 1) + randomLogoMin)
+
+			let xmax = watermarkHeight;
+			let ymax = watermarkHeight;
+			for(let x = 0; x < xmax;x++){
+				for(let y = 0; y < ymax;y++){
+					var logovalue = dataLogo[((xmax * y) + x) * 4]
+					if(logovalue == 0){
+						var red = data[((width * y) + x) * 4];
+						var green = data[((width * y) + x) * 4 + 1];
+						var blue = data[((width * y) + x) * 4 + 2];
+						//var alpha = data[((width * y) + x) * 4 + 3];
+					
+						data[((width * y) + x) * 4] = ((red + randomLogo) % 256);
+						data[((width * y) + x) * 4 + 1] = ((green + randomLogo) % 256);
+						data[((width * y) + x) * 4 + 2] = ((blue + randomLogo)%256);
+						//var alpha = data[((width * y) + x) * 4 + 3];
+					}
+				}
+			}
+			ctxEdited.putImageData(imageData, 0,0);
+			let filenamedata = filelist[i].name.split('.');
+			let filename = filenamedata[0];
+			let fileextension = filenamedata[1];
+			let text = randomLogo+"";
+			await SaveBlob(text,filename,fileextension);
+			resolve();
+		}
+		imgLogo.src = logoimg.src;
+	})
+}
+
+const drawImage = async (i) => {
+	return new Promise(resolve => {
+		img.onload = async function() {
+			let width = img.naturalWidth;
+			let height = img.naturalHeight;
+			canvasEdited.width = width;
+			canvasEdited.height = height;
+    			
+			let watermarkHeight = Math.floor(height * watermarkPercent);
+
+			ctxEdited.drawImage(img,0,0,width,height,
+				0,0,width,height);
+
+			var imageData = ctxEdited.getImageData(0,0,width,height);
+			var data = imageData.data;
+
+			imgLogo = new Image();
+			await drawLogo(i,watermarkHeight,imageData,data,width);
+			resolve();
+		}
+		img.src = URL.createObjectURL(filelist[i]);
+	})
+}
+/****************************
+process button
+*****************************/
+async function processAsync(){
+	progressBar.max = filelist.length;
+	progressBar.value = 0;
+	progressBar.style.display = null;
+	
+	for(let i = 0; i < filelist.length; i++){
+		img = new Image();
+		await drawImage(i);
+		console.log("test");
+		progressBar.value = i;
+	}
+
+	progressBar.style.display = "none";
+}
+/****************************
+file input
+*****************************/
+function readFile(input){
+  for(let i = 0; i < input.files.length;i++){
+	//todo
+	filelist.push(input.files[i]);
+  }
+  clearfilelist();
+  updatefilelist();
+}
+/****************************
+drag drop files
+*****************************/
+dropContainer.ondragover = dropContainer.ondragenter = function(evt) {
+  evt.preventDefault();
+};
+
+dropContainer.ondrop = function(evt) {
+  //fileInput.files = evt.dataTransfer.files;
+
+  for(let i = 0; i < evt.dataTransfer.files.length;i++){
+	//todo add check to prevent multiples
+	//todo restrict filetypes
+	filelist.push(evt.dataTransfer.files[i]);
+  }
+  clearfilelist();
+  updatefilelist();
+  evt.preventDefault();
+};
+</script>
+</body>
+</html>
